@@ -1392,26 +1392,28 @@ static void *tup_fs_init(struct fuse_conn_info *conn)
 
 int tup_fs_inited(void)
 {
+	int rc = 0;
 	struct timespec ts;
 
-	ts.tv_sec = time(NULL) + 5;
+	ts.tv_sec = time(NULL) + 10;
 	ts.tv_nsec = 0;
 	pthread_mutex_lock(&init_lock);
-	while(!fuse_inited) {
-		int rc;
+	while(!fuse_inited && rc == 0) {
 		rc = pthread_cond_timedwait(&init_cond, &init_lock, &ts);
-		if(rc != 0) {
-			pthread_mutex_unlock(&init_lock);
-			if(rc == ETIMEDOUT) {
-				fprintf(stderr, "tup error: Timed out waiting for the FUSE file-system to be ready.\n");
-				return -1;
-			}
-			perror("pthread_cond_timedwait");
-			return -1;
-		}
 	}
-	pthread_mutex_unlock(&init_lock);
-	return 0;
+
+	if (fuse_inited) {
+		pthread_mutex_unlock(&init_lock);
+		return 0;
+	} else if (rc == ETIMEDOUT) {
+		pthread_mutex_unlock(&init_lock);
+		fprintf(stderr, "tup error: Timed out waiting for the FUSE file-system to be ready.\n");
+		return -1;
+	} else {
+		pthread_mutex_unlock(&init_lock);
+		perror("pthread_cond_timedwait");
+		return -1;
+	}
 }
 
 struct fuse_operations tup_fs_oper = {
